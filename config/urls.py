@@ -1,0 +1,23 @@
+from django.contrib import admin
+from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+urlpatterns = [
+    # Django admin panel — accessible at http://localhost:8000/admin/
+    path('admin/', admin.site.urls),
+
+    # Auth endpoints — /auth/google/login/, /auth/callback/, /auth/me/
+    path('auth/', include('apps.users.urls')),
+
+    # API endpoints (will be wired on Day 2+)
+    # path('api/patients/', include('apps.patients.urls')),
+    # path('api/medicines/', include('apps.medicines.urls')),
+    # path('api/doses/', include('apps.doses.urls')),
+    # path('api/whatsapp/', include('apps.whatsapp.urls')),
+    # path('api/ai/', include('apps.ai.urls')),
+    # path('api/escalation/', include('apps.escalation.urls')),
+
+    # API Documentation — Swagger UI
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+]
