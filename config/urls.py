@@ -11,9 +11,9 @@ urlpatterns = [
 
     # API endpoints (will be wired on Day 2+)
     # path('api/patients/', include('apps.patients.urls')),
-    # path('api/medicines/', include('apps.medicines.urls')),
+    path('api/medicines/', include('apps.medicines.urls')),
     # path('api/doses/', include('apps.doses.urls')),
-    # path('api/whatsapp/', include('apps.whatsapp.urls')),
+    path('api/whatsapp/', include('apps.whatsapp.urls')),
     # path('api/ai/', include('apps.ai.urls')),
     # path('api/escalation/', include('apps.escalation.urls')),
 
