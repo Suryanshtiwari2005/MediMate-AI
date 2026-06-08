@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     # Third-party apps (installed via pip)
     'rest_framework',                # Django REST Framework — builds APIs
     'rest_framework_simplejwt',      # JWT token authentication
+    'rest_framework_simplejwt.token_blacklist',  # Token blacklist for secure logout
     'corsheaders',                   # Allows React (different port) to call Django
     'social_django',                 # Google OAuth integration
     'drf_spectacular',               # Auto-generates API documentation
