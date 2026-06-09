@@ -35,10 +35,10 @@ gantt
 | **Day 1: OAuth & Auth** | Google OAuth callback view, JWT session setup, logout blacklist, env template. | **100% Complete** ✅ |
 | **Day 2: Medicines CRUD** | Medicine & Schedule ViewSets, auto DoseLog generation signal, dose generator service. | **100% Complete** ✅ |
 | **Day 3: WhatsApp Service** | CallMeBot send integration, HF GPT-2 AI motivational tips service, manual trigger view, logs. | **100% Complete** ✅ |
-| **Day 4: Escalation Core** | Caretaker notification logic, emergency phone fallback, logging views. | **80% Complete** 🔄 |
-| **Day 5: APScheduler** | Setup `django-apscheduler` + background tasks checking overdue reminders/escalations. | **0% Complete** ❌ |
-| **Day 6: Dashboard APIs** | Caretaker dashboard patient lists & admin system statistics endpoints. | **0% Complete** ❌ |
-| **Day 7: Demo & Deploy** | 5-minute interactive script, CallMeBot pre-activation, Render deployment. | **0% Complete** ❌ |
+| **Day 4: Escalation Core** | Caretaker notification logic, emergency phone fallback, logging views. | **100% Complete** ✅ |
+| **Day 5: APScheduler** | Setup `django-apscheduler` + background tasks checking overdue reminders/escalations. | **100% Complete** ✅ |
+| **Day 6: Dashboard APIs** | Caretaker dashboard patient lists & admin system statistics endpoints. | **100% Complete** ✅ |
+| **Day 7: Demo & Deploy** | 5-minute interactive script, CallMeBot pre-activation, Render deployment. | **50% Complete** 🔄 |
 
 ---
 
@@ -69,6 +69,14 @@ You have successfully implemented the core API services, OAuth logic, and schedu
 * **Escalation logs listing view**: Coded in [escalation/views.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/apps/escalation/views.py).
 * **Escalation serializer**: Coded in [escalation/serializers.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/apps/escalation/serializers.py).
 
+### ⏰ APScheduler Background Tasks (Day 5)
+* **Scheduler jobs definition**: Configured in [scheduler/jobs.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/scheduler/jobs.py).
+* **Safe initialization startup**: Integrated into `ready()` in [apps/ai/apps.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/apps/ai/apps.py).
+
+### 📊 Dashboard & Admin Statistics (Day 6)
+* **Caretaker dashboard patient lists**: Coded in [apps/patients/views.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/apps/patients/views.py).
+* **Admin statistics & users views**: Coded in [apps/users/views.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/apps/users/views.py).
+
 ---
 
 ## ⏳ Your Remaining Tasks
@@ -76,28 +84,28 @@ You have successfully implemented the core API services, OAuth logic, and schedu
 Here is your personal roadmap of pending tasks to complete the prototype:
 
 ### 1. Wire Up Escalation URL Routing (Day 4 Cleanup)
-* [ ] Create `apps/escalation/urls.py` to route `/api/escalation/logs/` to your `list_escalation_logs` view.
-* [ ] Uncomment `path('api/escalation/', include('apps.escalation.urls'))` in [urls.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/config/urls.py#L18).
+* [x] Create `apps/escalation/urls.py` to route `/api/escalation/logs/` to your `list_escalation_logs` view.
+* [x] Uncomment `path('api/escalation/', include('apps.escalation.urls'))` in [urls.py](file:///c:/Users/ragha/project/medimate/MediMate-AI/config/urls.py#L18).
 
 ### 2. Implement APScheduler Background Jobs (Day 5)
-* [ ] Create `scheduler/` directory.
-* [ ] Write `scheduler/jobs.py` to configure:
+* [x] Create `scheduler/` directory.
+* [x] Write `scheduler/jobs.py` to configure:
   - **Every 1 minute**: Check pending doses > 30 minutes late and trigger WhatsApp reminders automatically.
   - **Every 1 minute**: Check missed doses > 45 minutes late and trigger caretaker escalation alerts.
   - **Every 6 hours**: Loop through active patient profiles and recalculate risk levels.
-* [ ] Hook the scheduler startup function `start_scheduler()` into a Django app initialization (like `apps.ai.apps.ready()`).
+* [x] Hook the scheduler startup function `start_scheduler()` into a Django app initialization (like `apps.ai.apps.ready()`).
 
 ### 3. Create Dashboard APIs (Day 6)
-* [ ] Build caretaker dashboard API view:
+* [x] Build caretaker dashboard API view:
   - `GET /api/patients/caretaker-dashboard/` -> Returns all assigned patients along with their today's dose statuses.
-* [ ] Build admin dashboard API views:
+* [x] Build admin dashboard API views:
   - `GET /api/admin/stats/` -> Returns system-wide statistics (e.g. compliance rates, total logs, active schedules).
   - `GET /api/admin/users/` -> Returns a paginated table of users (restricted to `role == 'admin'`).
 
 ### 4. Create Demo Script & Deploy Backend (Day 7)
 * [ ] Deploy the Django API server to Render (or equivalent PaaS).
-* [ ] Create a `.env` file on production containing:
+* [x] Create a `.env` file on production containing:
   - Google Client credentials.
   - CallMeBot active API gateway key.
   - Hugging Face Inference API keys.
-* [ ] Draft a step-by-step 5-minute interactive demo script (detailing clicks, responses, and alerts showcase).
+* [x] Draft a step-by-step 5-minute interactive demo script (detailing clicks, responses, and alerts showcase).
