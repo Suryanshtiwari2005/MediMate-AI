@@ -132,3 +132,92 @@ def auth_logout(request):
     except Exception:
         pass  # Token may already be invalid/expired — that's fine
     return Response({'success': True})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_stats(request):
+    """
+    Feature #69: System-wide statistics endpoint (admin only).
+    """
+    if request.user.role != 'admin':
+        return Response({'error': 'Access denied: Admin role required'}, status=403)
+        
+    from apps.patients.models import PatientProfile, Caretaker
+    from apps.medicines.models import MedicineSchedule
+    from apps.doses.models import DoseLog
+    from apps.escalation.models import EscalationLog
+    
+    total_patients = PatientProfile.objects.count()
+    total_caretakers = Caretaker.objects.count()
+    total_users = User.objects.count()
+    total_schedules = MedicineSchedule.objects.count()
+    total_doses = DoseLog.objects.count()
+    total_escalations = EscalationLog.objects.count()
+    
+    # Compliance rate calculation
+    non_pending = DoseLog.objects.exclude(status='pending')
+    total_non_pending = non_pending.count()
+    taken_doses = non_pending.filter(status='taken').count()
+    compliance_rate = round((taken_doses / total_non_pending * 100), 1) if total_non_pending > 0 else 100.0
+    
+    # Risk level breakdown
+    risk_breakdown = {
+        'low': PatientProfile.objects.filter(risk_level='low').count(),
+        'medium': PatientProfile.objects.filter(risk_level='medium').count(),
+        'high': PatientProfile.objects.filter(risk_level='high').count(),
+        'critical': PatientProfile.objects.filter(risk_level='critical').count(),
+    }
+    
+    stats = {
+        'total_patients': total_patients,
+        'total_caretakers': total_caretakers,
+        'total_users': total_users,
+        'total_schedules': total_schedules,
+        'total_doses': total_doses,
+        'total_escalations': total_escalations,
+        'compliance_rate': compliance_rate,
+        'risk_breakdown': risk_breakdown,
+    }
+    return Response(stats)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_users(request):
+    """
+    Feature #65: View all users (paginated table, restricted to admin).
+    """
+    if request.user.role != 'admin':
+        return Response({'error': 'Access denied: Admin role required'}, status=403)
+        
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    from .serializers import UserSerializer
+    
+    role_filter = request.GET.get('role')
+    search_query = request.GET.get('search')
+    users = User.objects.all().order_by('-created_at')
+    
+    if role_filter:
+        users = users.filter(role=role_filter)
+    if search_query:
+        users = users.filter(
+            Q(email__icontains=search_query) | 
+            Q(username__icontains=search_query) | 
+            Q(full_name__icontains=search_query)
+        )
+        
+    paginator = Paginator(users, 10) # 10 users per page
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    
+    serializer = UserSerializer(page_obj, many=True)
+    return Response({
+        'users': serializer.data,
+        'total_count': paginator.count,
+        'total_pages': paginator.num_pages,
+        'current_page': page_obj.number,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+    })

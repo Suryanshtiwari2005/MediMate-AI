@@ -42,7 +42,7 @@ def send_whatsapp_message(phone: str, message: str) -> bool:
 
     params = {
         'phone': phone,
-        'text': urllib.parse.quote(message),
+        'text': message,
         'apikey': apikey,
     }
     try:
