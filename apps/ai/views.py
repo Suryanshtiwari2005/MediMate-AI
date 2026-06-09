@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from services.ai_service import calculate_risk_score, get_7d_predictions, get_adherence_trend
+from services.ai_service import calculate_risk_score, get_7d_predictions, get_adherence_trend as get_adherence_trend_service
 from apps.patients.models import PatientProfile
 from apps.doses.models import DoseLog
 
@@ -101,7 +101,7 @@ def get_adherence_trend(request):
             if not patient:
                 return Response({'error': 'Patient profile not found'}, status=404)
                 
-    trend = get_adherence_trend(patient.id)
+    trend = get_adherence_trend_service(patient.id)
     return Response({'trend': trend})
 
 

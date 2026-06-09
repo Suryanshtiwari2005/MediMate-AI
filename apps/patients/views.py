@@ -1,118 +1,228 @@
-from datetime import date
-from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.response import Response
+"""
+API views for Patient Profile and Caretaker management.
+
+Endpoints:
+  POST   /api/patients/onboarding/     → Complete onboarding (create profile)
+  GET    /api/patients/me/             → Get my profile
+  PUT    /api/patients/me/             → Update my profile
+  GET    /api/patients/                → List patients (admin/caretaker only)
+  GET    /api/patients/{id}/           → Get specific patient (admin/caretaker)
+  POST   /api/patients/assign-caretaker/  → Assign caretaker to patient
+  DELETE /api/patients/remove-caretaker/  → Remove caretaker from patient
+"""
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 from .models import PatientProfile, Caretaker
-from .serializers import PatientProfileSerializer, CaretakerSerializer
-from apps.doses.models import DoseLog
-from apps.doses.serializers import DoseLogSerializer
+from .serializers import (
+    PatientProfileSerializer,
+    PatientOnboardingSerializer,
+    CaretakerSerializer,
+)
+from .permissions import IsPatient, IsCaretakerOrAdmin
 
-class PatientProfileViewSet(viewsets.ModelViewSet):
+
+# ──────────────────────────────────────────────
+# PATIENT OWN PROFILE
+# ──────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def onboarding(request):
     """
-    Feature #8: Patient Profile CRUD.
+    Feature #7: Multi-step onboarding — saves patient profile.
+    Feature #9: Direct WhatsApp number save.
+    Feature #13: Sets onboarding_done = True.
+
+    Called once after Google login when user fills the onboarding wizard.
     """
-    serializer_class = PatientProfileSerializer
-    permission_classes = [IsAuthenticated]
+    user = request.user
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == 'admin':
-            return PatientProfile.objects.all()
-        elif user.role == 'caretaker':
-            try:
-                return user.caretaker_profile.patients.all()
-            except Caretaker.DoesNotExist:
-                return PatientProfile.objects.none()
-        return PatientProfile.objects.filter(user=user)
+    # Check if profile already exists
+    if hasattr(user, 'patient_profile'):
+        return Response(
+            {"error": "Profile already exists. Use PUT /api/patients/me/ to update."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    # Make sure user is a patient
+    if user.role != 'patient':
+        return Response(
+            {"error": "Only patients can complete onboarding."},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
-    @action(detail=False, methods=['post'])
-    def save_whatsapp(self, request):
-        """Feature #9: Save WhatsApp number directly without OTP verification."""
-        number = request.data.get('whatsapp_number')
-        if not number:
-            return Response({'error': 'WhatsApp number required'}, status=400)
-        request.user.whatsapp_number = number
-        request.user.save()
-        return Response({'success': True, 'whatsapp_number': number})
+    serializer = PatientOnboardingSerializer(
+        data=request.data,
+        context={'request': request}  # Pass request so serializer can access user
+    )
+    if serializer.is_valid():
+        profile = serializer.save()
+        # Return full profile with user info
+        return Response(
+            PatientProfileSerializer(profile).data,
+            status=status.HTTP_201_CREATED
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['post'])
-    def complete_onboarding(self, request):
-        """Feature #13: Mark patient onboarding as done."""
+
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([IsAuthenticated, IsPatient])
+def my_profile(request):
+    """
+    Feature #8: Patient Profile CRUD — get or update own profile.
+
+    GET  → Returns the patient's own profile
+    PUT  → Full update of profile
+    PATCH → Partial update of profile
+    """
+    try:
+        profile = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        return Response(
+            {"error": "No profile found. Complete onboarding first."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        serializer = PatientProfileSerializer(profile)
+        return Response(serializer.data)
+
+    # PUT or PATCH
+    serializer = PatientOnboardingSerializer(
+        profile,
+        data=request.data,
+        partial=(request.method == 'PATCH'),  # PATCH = only send changed fields
+        context={'request': request}
+    )
+    if serializer.is_valid():
+        profile = serializer.save()
+        return Response(PatientProfileSerializer(profile).data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ──────────────────────────────────────────────
+# PATIENT LIST (for caretakers & admins)
+# ──────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCaretakerOrAdmin])
+def list_patients(request):
+    """
+    List patients — filtered by role:
+    - Caretaker: sees only their assigned patients
+    - Admin: sees all patients
+    """
+    if request.user.role == 'admin':
+        patients = PatientProfile.objects.select_related('user').all()
+    else:
+        # Caretaker — only assigned patients
         try:
-            profile = request.user.patient_profile
-            profile.onboarding_done = True
-            profile.save()
-            return Response({'onboarding_done': True})
-        except PatientProfile.DoesNotExist:
-            return Response({'error': 'Patient profile not found'}, status=404)
+            caretaker = request.user.caretaker_profile
+            patients = caretaker.patients.select_related('user').all()
+        except Caretaker.DoesNotExist:
+            return Response(
+                {"error": "Caretaker profile not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-
-class CaretakerViewSet(viewsets.ModelViewSet):
-    """
-    Feature #61: Caretaker Patient Assignment.
-    """
-    serializer_class = CaretakerSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        if self.request.user.role == 'admin':
-            return Caretaker.objects.all()
-        return Caretaker.objects.filter(user=self.request.user)
-
-    @action(detail=True, methods=['post'])
-    def assign_patient(self, request, pk=None):
-        caretaker = self.get_object()
-        patient_id = request.data.get('patient_id')
-        try:
-            patient = PatientProfile.objects.get(id=patient_id)
-            caretaker.patients.add(patient)
-            return Response({'success': True})
-        except PatientProfile.DoesNotExist:
-            return Response({'error': 'Patient not found'}, status=404)
+    serializer = PatientProfileSerializer(patients, many=True)
+    return Response(serializer.data)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def caretaker_dashboard(request):
-    """
-    Feature #63: aggregate patient data for caretaker view.
-    Returns caretaker's assigned patients with today's dose statuses.
-    """
-    user = request.user
-    if user.role != 'caretaker' and user.role != 'admin':
-        return Response({'error': 'Access denied: Caretaker or Admin role required'}, status=403)
-    
+@permission_classes([IsAuthenticated, IsCaretakerOrAdmin])
+def get_patient(request, patient_id):
+    """Get a specific patient's profile (caretaker/admin only)."""
     try:
-        if user.role == 'admin':
-            patients = PatientProfile.objects.all()
-        else:
-            patients = user.caretaker_profile.patients.all()
+        patient = PatientProfile.objects.select_related('user').get(id=patient_id)
+    except PatientProfile.DoesNotExist:
+        return Response(
+            {"error": "Patient not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Caretakers can only see their assigned patients
+    if request.user.role == 'caretaker':
+        try:
+            caretaker = request.user.caretaker_profile
+            if not caretaker.patients.filter(id=patient_id).exists():
+                return Response(
+                    {"error": "You are not assigned to this patient."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except Caretaker.DoesNotExist:
+            return Response(
+                {"error": "Caretaker profile not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    serializer = PatientProfileSerializer(patient)
+    return Response(serializer.data)
+
+
+# ──────────────────────────────────────────────
+# CARETAKER ASSIGNMENT
+# ──────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assign_caretaker(request):
+    """
+    Feature #61: Assign a caretaker to a patient.
+
+    Body: { "patient_id": 1, "caretaker_id": 2 }
+    Only admins or the caretaker themselves can do this.
+    """
+    patient_id = request.data.get('patient_id')
+    caretaker_id = request.data.get('caretaker_id')
+
+    if not patient_id or not caretaker_id:
+        return Response(
+            {"error": "Both patient_id and caretaker_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        patient = PatientProfile.objects.get(id=patient_id)
+        caretaker = Caretaker.objects.get(id=caretaker_id)
+    except PatientProfile.DoesNotExist:
+        return Response({"error": "Patient not found."}, status=status.HTTP_404_NOT_FOUND)
     except Caretaker.DoesNotExist:
-        return Response({'error': 'Caretaker profile not found'}, status=404)
-        
-    result = []
-    today = date.today()
-    for patient in patients:
-        doses = DoseLog.objects.filter(patient=patient, scheduled_date=today).select_related('medicine')
-        taken_count = doses.filter(status='taken').count()
-        total_count = doses.count()
-        
-        result.append({
-            'patient_id': patient.id,
-            'patient_name': patient.user.full_name,
-            'age': patient.age,
-            'gender': patient.gender,
-            'risk_level': patient.risk_level,
-            'adherence_score': patient.adherence_score,
-            'today_doses': DoseLogSerializer(doses, many=True).data,
-            'compliance': {
-                'taken': taken_count,
-                'total': total_count,
-            }
-        })
-        
-    return Response({'patients': result})
+        return Response({"error": "Caretaker not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    # Add patient to caretaker's list (M2M)
+    caretaker.patients.add(patient)
+
+    return Response({
+        "message": f"Caretaker {caretaker.user.full_name} assigned to patient {patient.user.full_name}",
+        "caretaker": CaretakerSerializer(caretaker).data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_caretaker(request):
+    """Remove a caretaker from a patient."""
+    patient_id = request.data.get('patient_id')
+    caretaker_id = request.data.get('caretaker_id')
+
+    if not patient_id or not caretaker_id:
+        return Response(
+            {"error": "Both patient_id and caretaker_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        patient = PatientProfile.objects.get(id=patient_id)
+        caretaker = Caretaker.objects.get(id=caretaker_id)
+    except (PatientProfile.DoesNotExist, Caretaker.DoesNotExist):
+        return Response({"error": "Patient or Caretaker not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    caretaker.patients.remove(patient)
+
+    return Response({
+        "message": f"Caretaker {caretaker.user.full_name} removed from patient {patient.user.full_name}",
+    })
