@@ -54,8 +54,13 @@ def onboarding(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+    gender = data.get('gender')
+    if gender and isinstance(gender, str):
+        data['gender'] = gender.lower()
+
     serializer = PatientOnboardingSerializer(
-        data=request.data,
+        data=data,
         context={'request': request}  # Pass request so serializer can access user
     )
     if serializer.is_valid():
@@ -74,26 +79,54 @@ def my_profile(request):
     """
     Feature #8: Patient Profile CRUD — get or update own profile.
 
-    GET  → Returns the patient's own profile
-    PUT  → Full update of profile
-    PATCH → Partial update of profile
+    GET  → Returns the patient's own profile (or a dummy in-memory one if not onboarded)
+    PUT  → Full update of profile (or create and update if not onboarded)
+    PATCH → Partial update of profile (or create and update if not onboarded)
     """
     try:
         profile = request.user.patient_profile
     except PatientProfile.DoesNotExist:
-        return Response(
-            {"error": "No profile found. Complete onboarding first."},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        if request.method == 'GET':
+            profile = PatientProfile(
+                id=request.user.id,
+                user=request.user,
+                age=0,
+                gender='other',
+                blood_group='',
+                diseases=[],
+                allergies=[],
+                chronic_conditions=[],
+                emergency_phone='',
+                onboarding_done=False
+            )
+            serializer = PatientProfileSerializer(profile)
+            return Response(serializer.data)
+        elif request.method in ('PUT', 'PATCH'):
+            profile = PatientProfile.objects.create(
+                user=request.user,
+                age=0,
+                gender='other',
+                onboarding_done=True
+            )
+        else:
+            return Response(
+                {"error": "No profile found. Complete onboarding first."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
     if request.method == 'GET':
         serializer = PatientProfileSerializer(profile)
         return Response(serializer.data)
 
     # PUT or PATCH
+    data = request.data.copy() if hasattr(request.data, 'copy') else request.data
+    gender = data.get('gender')
+    if gender and isinstance(gender, str):
+        data['gender'] = gender.lower()
+
     serializer = PatientOnboardingSerializer(
         profile,
-        data=request.data,
+        data=data,
         partial=(request.method == 'PATCH'),  # PATCH = only send changed fields
         context={'request': request}
     )
@@ -136,8 +169,30 @@ def list_patients(request):
 @permission_classes([IsAuthenticated, IsCaretakerOrAdmin])
 def get_patient(request, patient_id):
     """Get a specific patient's profile (caretaker/admin only)."""
+    from django.db.models import Q
+    from apps.users.models import User
     try:
-        patient = PatientProfile.objects.select_related('user').get(id=patient_id)
+        patient = PatientProfile.objects.select_related('user').filter(
+            Q(id=patient_id) | Q(user_id=patient_id)
+        ).first()
+        if not patient:
+            # Fallback: check if User exists with this ID who has role='patient'
+            user_obj = User.objects.filter(id=patient_id, role='patient').first()
+            if user_obj:
+                patient = PatientProfile(
+                    id=user_obj.id,
+                    user=user_obj,
+                    age=0,
+                    gender='other',
+                    blood_group='',
+                    diseases=[],
+                    allergies=[],
+                    chronic_conditions=[],
+                    emergency_phone='',
+                    onboarding_done=False
+                )
+            else:
+                raise PatientProfile.DoesNotExist()
     except PatientProfile.DoesNotExist:
         return Response(
             {"error": "Patient not found."},
@@ -148,7 +203,7 @@ def get_patient(request, patient_id):
     if request.user.role == 'caretaker':
         try:
             caretaker = request.user.caretaker_profile
-            if not caretaker.patients.filter(id=patient_id).exists():
+            if not caretaker.patients.filter(Q(id=patient_id) | Q(user_id=patient_id)).exists():
                 return Response(
                     {"error": "You are not assigned to this patient."},
                     status=status.HTTP_403_FORBIDDEN

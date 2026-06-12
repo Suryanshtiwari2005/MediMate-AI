@@ -9,6 +9,7 @@ urlpatterns = [
 
     # Auth endpoints — /auth/google/login/, /auth/callback/, /auth/me/
     path('auth/', include('apps.users.urls')),
+    path('api/auth/', include('apps.users.urls')),
 
     # API endpoints
     path('api/patients/', include('apps.patients.urls')),
