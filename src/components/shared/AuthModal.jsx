@@ -52,7 +52,9 @@ export default function AuthModal({ onClose }) {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/auth/google/login/`;
+    // Backend root URL (without /api suffix)
+    const backendRoot = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+    window.location.href = `${backendRoot}/auth/google/login/`;
   };
 
   const inputStyle = {

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Pill, Calendar, Brain, MessageSquare, Settings, LogOut, Menu, X, ChevronRight, Bell } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { LayoutDashboard, Pill, Calendar, Brain, MessageSquare, Settings, LogOut, Menu, X, ChevronRight, Bell, AlertTriangle } from 'lucide-react';
+import { useAuth, apiClient } from '@/context/AuthContext';
 
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
@@ -9,6 +9,7 @@ const NAV = [
   { label: 'Dose History', icon: Calendar, to: '/dashboard/history' },
   { label: 'AI Predictions', icon: Brain, to: '/dashboard/predictions' },
   { label: 'WhatsApp Log', icon: MessageSquare, to: '/dashboard/whatsapp' },
+  { label: 'Escalations', icon: AlertTriangle, to: '/dashboard/escalations' },
   { label: 'Settings', icon: Settings, to: '/dashboard/settings' },
 ];
 
@@ -17,11 +18,31 @@ export default function PatientLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const notifRef = useRef(null);
 
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
+
+  useEffect(() => {
+    apiClient.get('/escalation/logs/')
+      .then(res => {
+        const logs = res.data?.logs || [];
+        setNotifications(logs.filter(l => !l.resolved).slice(0, 8));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const Sidebar = ({ mobile = false }) => (
     <div style={{
@@ -111,10 +132,50 @@ export default function PatientLayout({ children }) {
             <Menu size={20} />
           </button>
           <div style={{ flex: 1 }} />
-          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', position: 'relative' }}>
-            <Bell size={18} />
-            <span style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: '50%', background: 'var(--cyan)' }} />
-          </button>
+          {/* Notification bell with dropdown */}
+          <div ref={notifRef} style={{ position: 'relative' }}>
+            <button onClick={() => setNotifOpen(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <Bell size={18} />
+              {notifications.length > 0 && (
+                <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: '50%', background: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#050d1a', padding: '0 2px' }}>{notifications.length}</span>
+              )}
+            </button>
+
+            {notifOpen && (
+              <div style={{ position: 'absolute', top: 40, right: 0, width: 320, maxHeight: 400, overflowY: 'auto', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.5)', zIndex: 100, padding: '12px 0' }}>
+                <div style={{ padding: '8px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Escalation Alerts</span>
+                  <span style={{ fontSize: 11, color: 'var(--cyan)', fontWeight: 600 }}>{notifications.length} active</span>
+                </div>
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No active escalations</div>
+                ) : (
+                  notifications.map((n, i) => (
+                    <div key={n.id || i} style={{ padding: '10px 16px', borderBottom: i < notifications.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,212,255,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      onClick={() => { setNotifOpen(false); navigate('/dashboard/escalations'); }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <AlertTriangle size={13} color="#ef4444" />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{n.medicine_name || 'Alert'}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        {n.escalation_type || 'Alert'} — {n.message || ''}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {notifications.length > 0 && (
+                  <div style={{ padding: '10px 16px', textAlign: 'center', borderTop: '1px solid var(--border)' }}>
+                    <Link to="/dashboard/escalations" onClick={() => setNotifOpen(false)} style={{ fontSize: 12, color: 'var(--cyan)', textDecoration: 'none', fontWeight: 600 }}>View all escalations →</Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, var(--cyan), var(--emerald))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#050d1a' }}>{user?.name?.[0]?.toUpperCase() || 'P'}</span>
           </div>

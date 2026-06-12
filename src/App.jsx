@@ -6,18 +6,30 @@ import ProtectedRoute from './components/shared/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import LoginCallback from './pages/LoginCallback';
 
 // Patient Pages
 import PatientDashboard from './pages/patient/PatientDashboard';
 import DoseHistory from './pages/patient/DoseHistory';
 import AIPredictions from './pages/patient/AIPredictions';
 import WhatsAppLog from './pages/patient/WhatsAppLog';
+import MedicinesPage from './pages/patient/MedicinesPage';
+import OnboardingPage from './pages/patient/OnboardingPage';
+import EscalationLogs from './pages/patient/EscalationLogs';
+import PatientSettings from './pages/patient/PatientSettings';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUserManagement from './pages/admin/AdminUserManagement';
+import AdminEscalations from './pages/admin/AdminEscalations';
+import AdminWhatsAppLog from './pages/admin/AdminWhatsAppLog';
+import AdminPatientProfile from './pages/admin/AdminPatientProfile';
 
 // Caretaker Pages
 import CaretakerDashboard from './pages/caretaker/CaretakerDashboard';
+import CaretakerPatients from './pages/caretaker/CaretakerPatients';
+import CaretakerEscalations from './pages/caretaker/CaretakerEscalations';
+import CaretakerPatientProfile from './pages/caretaker/CaretakerPatientProfile';
 
 export default function App() {
   return (
@@ -28,6 +40,17 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/login" element={<LoginCallback />} />
+
+          {/* Onboarding */}
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute role="patient">
+                <OnboardingPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Patient Routes */}
           <Route
@@ -66,7 +89,15 @@ export default function App() {
             path="/dashboard/medicines"
             element={
               <ProtectedRoute role="patient">
-                <PatientDashboard />
+                <MedicinesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/escalations"
+            element={
+              <ProtectedRoute role="patient">
+                <EscalationLogs />
               </ProtectedRoute>
             }
           />
@@ -74,7 +105,7 @@ export default function App() {
             path="/dashboard/settings"
             element={
               <ProtectedRoute role="patient">
-                <PatientDashboard />
+                <PatientSettings />
               </ProtectedRoute>
             }
           />
@@ -89,10 +120,34 @@ export default function App() {
             }
           />
           <Route
-            path="/admin/*"
+            path="/admin/users"
             element={
               <ProtectedRoute role="admin">
-                <AdminDashboard />
+                <AdminUserManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/escalations"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminEscalations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/whatsapp"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminWhatsAppLog />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/patient/:patientId"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminPatientProfile />
               </ProtectedRoute>
             }
           />
@@ -107,10 +162,26 @@ export default function App() {
             }
           />
           <Route
-            path="/caretaker/*"
+            path="/caretaker/patients"
             element={
               <ProtectedRoute role="caretaker">
-                <CaretakerDashboard />
+                <CaretakerPatients />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/caretaker/escalations"
+            element={
+              <ProtectedRoute role="caretaker">
+                <CaretakerEscalations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/caretaker/patient/:patientId"
+            element={
+              <ProtectedRoute role="caretaker">
+                <CaretakerPatientProfile />
               </ProtectedRoute>
             }
           />

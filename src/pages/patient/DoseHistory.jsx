@@ -1,28 +1,14 @@
-import { useState } from 'react';
-import { Filter, CheckCircle, XCircle, SkipForward, Clock, Search } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Filter, CheckCircle, XCircle, SkipForward, Clock, Search, Loader2 } from 'lucide-react';
 import PatientLayout from '@/components/layout/PatientLayout';
-
-const MOCK_HISTORY = Array.from({ length: 30 }, (_, i) => {
-  const date = new Date();
-  date.setDate(date.getDate() - Math.floor(i / 2));
-  const statuses = ['taken', 'taken', 'missed', 'taken', 'skipped', 'taken'];
-  const meds = ['Metformin 500mg', 'Lisinopril 10mg', 'Atorvastatin 20mg'];
-  const times = ['07:00', '08:00', '14:00', '21:00', '22:00'];
-  return {
-    id: i + 1,
-    medicine: meds[i % 3],
-    time: times[i % 5],
-    date: date.toISOString().split('T')[0],
-    status: statuses[i % 6],
-    skip_reason: i % 6 === 4 ? 'Nausea and upset stomach' : null,
-  };
-});
+import { apiClient } from '@/context/AuthContext';
 
 const STATUS_CONFIG = {
   taken:   { label: 'Taken',   color: 'var(--emerald)', bg: 'rgba(0,255,157,0.12)', icon: CheckCircle },
   missed:  { label: 'Missed',  color: '#ef4444',        bg: 'rgba(239,68,68,0.12)', icon: XCircle },
   skipped: { label: 'Skipped', color: 'var(--amber)',   bg: 'rgba(245,158,11,0.12)', icon: SkipForward },
   pending: { label: 'Pending', color: 'var(--cyan)',     bg: 'rgba(0,212,255,0.08)', icon: Clock },
+  rescheduled: { label: 'Rescheduled', color: 'var(--cyan)', bg: 'rgba(0,212,255,0.08)', icon: Clock },
 };
 
 export default function DoseHistory() {
@@ -30,12 +16,38 @@ export default function DoseHistory() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [doses, setDoses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = MOCK_HISTORY.filter(d => {
-    if (filter !== 'all' && d.status !== filter) return false;
-    if (search && !d.medicine.toLowerCase().includes(search.toLowerCase())) return false;
-    if (dateFrom && d.date < dateFrom) return false;
-    if (dateTo && d.date > dateTo) return false;
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setLoading(true);
+      try {
+        const params = {};
+        if (dateFrom) params.start_date = dateFrom;
+        if (dateTo) params.end_date = dateTo;
+        if (filter !== 'all') params.status = filter;
+        // Default: backend returns last 7 days if no params
+        if (!dateFrom && !dateTo) {
+          const d = new Date();
+          d.setDate(d.getDate() - 30);
+          params.start_date = d.toISOString().split('T')[0];
+          params.end_date = new Date().toISOString().split('T')[0];
+        }
+        const { data } = await apiClient.get('/doses/history/', { params });
+        setDoses(data.doses || []);
+      } catch (err) {
+        console.error('Error fetching history:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [dateFrom, dateTo, filter]);
+
+  // Client-side search filter for medicine name
+  const filtered = doses.filter(d => {
+    if (search && !((d.medicine_name || '').toLowerCase().includes(search.toLowerCase()))) return false;
     return true;
   });
 
@@ -58,7 +70,6 @@ export default function DoseHistory() {
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
 
-          {/* Status filter */}
           <div style={{ display: 'flex', gap: 6 }}>
             {['all', 'taken', 'missed', 'skipped'].map(s => (
               <button key={s} onClick={() => setFilter(s)} style={{
@@ -75,42 +86,48 @@ export default function DoseHistory() {
       </div>
 
       {/* Table */}
-      <div className="glass-card" style={{ overflow: 'hidden' }}>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Medicine</th>
-              <th>Date</th>
-              <th>Scheduled Time</th>
-              <th>Status</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No records found.</td></tr>
-            ) : (
-              filtered.map(dose => {
-                const cfg = STATUS_CONFIG[dose.status];
-                const Icon = cfg?.icon || Clock;
-                return (
-                  <tr key={dose.id}>
-                    <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{dose.medicine}</td>
-                    <td>{dose.date}</td>
-                    <td className="font-mono">{dose.time}</td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: cfg?.bg, color: cfg?.color }}>
-                        <Icon size={12} /> {cfg?.label}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12 }}>{dose.skip_reason || '—'}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+          <Loader2 size={28} color="var(--cyan)" style={{ animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : (
+        <div className="glass-card" style={{ overflow: 'hidden' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Medicine</th>
+                <th>Date</th>
+                <th>Scheduled Time</th>
+                <th>Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No records found.</td></tr>
+              ) : (
+                filtered.map(dose => {
+                  const cfg = STATUS_CONFIG[dose.status] || STATUS_CONFIG.pending;
+                  const Icon = cfg?.icon || Clock;
+                  return (
+                    <tr key={dose.id}>
+                      <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{dose.medicine_name} {dose.medicine_dosage}</td>
+                      <td>{dose.scheduled_date}</td>
+                      <td className="font-mono">{dose.scheduled_time?.slice(0, 5)}</td>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: cfg?.bg, color: cfg?.color }}>
+                          <Icon size={12} /> {cfg?.label}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 12 }}>{dose.skip_reason || '—'}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 12 }}>{filtered.length} records found</p>
     </PatientLayout>

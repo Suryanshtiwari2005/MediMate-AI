@@ -28,12 +28,27 @@ apiClient.interceptors.response.use(
         return apiClient(original);
       } catch {
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     }
     return Promise.reject(error);
   }
 );
+
+// Helper: normalize user object from backend
+function normalizeUser(u) {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.full_name || u.name || '',
+    full_name: u.full_name || u.name || '',
+    role: u.role,
+    avatar_url: u.avatar_url || '',
+    whatsapp_number: u.whatsapp_number || '',
+    has_profile: u.has_profile,
+    onboarding_done: u.onboarding_done,
+  };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -52,18 +67,20 @@ export function AuthProvider({ children }) {
     const { data } = await apiClient.post('/auth/login/', credentials);
     localStorage.setItem('access_token', data.access);
     localStorage.setItem('refresh_token', data.refresh);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    const userData = normalizeUser(data.user);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+    return userData;
   }, []);
 
-  const googleLogin = useCallback(async (googleToken) => {
-    const { data } = await apiClient.post('/auth/google/', { token: googleToken });
+  const register = useCallback(async (payload) => {
+    const { data } = await apiClient.post('/auth/register/', payload);
     localStorage.setItem('access_token', data.access);
     localStorage.setItem('refresh_token', data.refresh);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    const userData = normalizeUser(data.user);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+    return userData;
   }, []);
 
   const logout = useCallback(async () => {
@@ -75,17 +92,21 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const register = useCallback(async (payload) => {
-    const { data } = await apiClient.post('/auth/register/', payload);
-    localStorage.setItem('access_token', data.access);
-    localStorage.setItem('refresh_token', data.refresh);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+  // Refresh user data from /auth/me/
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get('/auth/me/');
+      const userData = normalizeUser(data);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch {
+      return null;
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, googleLogin, register, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register, setUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
