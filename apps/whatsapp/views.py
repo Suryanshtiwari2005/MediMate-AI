@@ -13,6 +13,21 @@ from .models import WhatsAppInteraction
 from .serializers import WhatsAppInteractionSerializer
 from apps.doses.models import DoseLog
 from services.whatsapp_service import send_whatsapp_message
+import os
+
+
+def get_whatsapp_error_message() -> str:
+    """Helper to return dynamic, helpful error message based on credentials."""
+    if os.environ.get('WHATSAPP_ACCESS_TOKEN') and os.environ.get('WHATSAPP_PHONE_NUMBER_ID'):
+        return (
+            "Official Meta WhatsApp API send failed. Check backend console logs. "
+            "If using a Sandbox account, make sure the recipient phone number is added "
+            "to the 'Allowed / Verified Sandbox Numbers' list in your Meta Developer Console."
+        )
+    elif os.environ.get('CALLMEBOT_APIKEY'):
+        return "CallMeBot WhatsApp send failed. Please check your apiKey or phone number configuration."
+    else:
+        return "No WhatsApp API credentials configured (WHATSAPP_ACCESS_TOKEN or CALLMEBOT_APIKEY). Simulated send logged."
 
 
 @api_view(['POST'])
@@ -22,11 +37,53 @@ def send_reminder_manual(request):
     Feature #38: Manual Reminder Trigger
     POST /api/whatsapp/send-reminder/ — manually trigger a WhatsApp reminder for any dose.
     """
+    patient_id = request.data.get('patient_id')
     dose_log_id = request.data.get('dose_log_id')
-    try:
-        dose_log = DoseLog.objects.get(id=dose_log_id, patient__user=request.user)
-    except DoseLog.DoesNotExist:
-        return Response({'error': 'Dose not found'}, status=404)
+    
+    dose_log = None
+    if patient_id:
+        from apps.patients.models import PatientProfile
+        try:
+            if request.user.role == 'admin':
+                patient = PatientProfile.objects.get(id=patient_id)
+            else:
+                patient = request.user.caretaker_profile.patients.get(id=patient_id)
+        except Exception:
+            return Response({'error': 'Patient not found or access denied'}, status=404)
+            
+        dose_log = DoseLog.objects.filter(patient=patient).first()
+        if not dose_log:
+            from apps.medicines.models import Medicine, MedicineSchedule
+            medicine, _ = Medicine.objects.get_or_create(
+                name="Test Aspirin",
+                defaults={'dosage': '100mg', 'instructions': 'Take 1 tablet in the morning'}
+            )
+            schedule, _ = MedicineSchedule.objects.get_or_create(
+                patient=patient,
+                medicine=medicine,
+                defaults={
+                    'scheduled_time': timezone.now().time(),
+                    'start_date': timezone.now().date(),
+                    'is_active': True
+                }
+            )
+            dose_log, _ = DoseLog.objects.get_or_create(
+                schedule=schedule,
+                scheduled_date=timezone.now().date(),
+                scheduled_time=schedule.scheduled_time,
+                defaults={
+                    'patient': patient,
+                    'medicine': medicine,
+                    'status': 'pending'
+                }
+            )
+    elif dose_log_id:
+        try:
+            dose_log = DoseLog.objects.get(id=dose_log_id, patient__user=request.user)
+        except DoseLog.DoesNotExist:
+            return Response({'error': 'Dose not found'}, status=404)
+    else:
+        return Response({'error': 'patient_id or dose_log_id required'}, status=400)
 
     from services.ai_message_service import generate_ai_variables
     from services.whatsapp_service import send_reminder
@@ -34,7 +91,12 @@ def send_reminder_manual(request):
     success = send_reminder(dose_log, dose_log.patient, variables)
     dose_log.reminder_sent = True
     dose_log.save()
-    return Response({'success': success, 'message_id': dose_log.id})
+    
+    return Response({
+        'success': success,
+        'message': 'WhatsApp reminder triggered successfully!' if success else get_whatsapp_error_message(),
+        'message_id': dose_log.id
+    })
 
 
 @api_view(['GET'])
@@ -124,3 +186,113 @@ def whatsapp_webhook(request):
     # Send confirmation reply via WhatsApp
     send_whatsapp_message(interaction.whatsapp_number, reply)
     return Response({'processed': True, 'reply': reply})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def trigger_escalation_manual(request):
+    """
+    Manually triggers a caretaker WhatsApp escalation for a patient.
+    POST /api/whatsapp/trigger-escalation/
+    """
+    patient_id = request.data.get('patient_id')
+    if not patient_id:
+        return Response({'error': 'patient_id is required'}, status=400)
+    
+    from apps.patients.models import PatientProfile
+    try:
+        if request.user.role == 'admin':
+            patient = PatientProfile.objects.get(id=patient_id)
+        else:
+            patient = request.user.caretaker_profile.patients.get(id=patient_id)
+    except Exception:
+        return Response({'error': 'Patient not found or access denied'}, status=404)
+        
+    dose_log = DoseLog.objects.filter(patient=patient).first()
+    if not dose_log:
+        from apps.medicines.models import Medicine, MedicineSchedule
+        medicine, _ = Medicine.objects.get_or_create(
+            name="Test Aspirin",
+            defaults={'dosage': '100mg', 'instructions': 'Take 1 tablet in the morning'}
+        )
+        schedule, _ = MedicineSchedule.objects.get_or_create(
+            patient=patient,
+            medicine=medicine,
+            defaults={
+                'scheduled_time': timezone.now().time(),
+                'start_date': timezone.now().date(),
+                'is_active': True
+            }
+        )
+        dose_log, _ = DoseLog.objects.get_or_create(
+            schedule=schedule,
+            scheduled_date=timezone.now().date(),
+            scheduled_time=schedule.scheduled_time,
+            defaults={
+                'patient': patient,
+                'medicine': medicine,
+                'status': 'missed'
+            }
+        )
+        
+    from services.escalation_service import trigger_caretaker_alert
+    success = trigger_caretaker_alert(dose_log)
+    return Response({
+        'success': success,
+        'message': 'Caretaker WhatsApp alert triggered successfully!' if success else get_whatsapp_error_message()
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def trigger_voice_manual(request):
+    """
+    Manually triggers a caretaker Twilio voice call alert for a patient.
+    POST /api/whatsapp/trigger-voice/
+    """
+    patient_id = request.data.get('patient_id')
+    if not patient_id:
+        return Response({'error': 'patient_id is required'}, status=400)
+        
+    from apps.patients.models import PatientProfile
+    try:
+        if request.user.role == 'admin':
+            patient = PatientProfile.objects.get(id=patient_id)
+        else:
+            patient = request.user.caretaker_profile.patients.get(id=patient_id)
+    except Exception:
+        return Response({'error': 'Patient not found or access denied'}, status=404)
+        
+    dose_log = DoseLog.objects.filter(patient=patient).first()
+    if not dose_log:
+        from apps.medicines.models import Medicine, MedicineSchedule
+        medicine, _ = Medicine.objects.get_or_create(
+            name="Test Aspirin",
+            defaults={'dosage': '100mg', 'instructions': 'Take 1 tablet in the morning'}
+        )
+        schedule, _ = MedicineSchedule.objects.get_or_create(
+            patient=patient,
+            medicine=medicine,
+            defaults={
+                'scheduled_time': timezone.now().time(),
+                'start_date': timezone.now().date(),
+                'is_active': True
+            }
+        )
+        dose_log, _ = DoseLog.objects.get_or_create(
+            schedule=schedule,
+            scheduled_date=timezone.now().date(),
+            scheduled_time=schedule.scheduled_time,
+            defaults={
+                'patient': patient,
+                'medicine': medicine,
+                'status': 'missed'
+            }
+        )
+        
+    from services.call_service import make_bot_call
+    success = make_bot_call(dose_log)
+    return Response({
+        'success': success,
+        'message': 'Caretaker Twilio Voice call triggered successfully!' if success else 'Twilio call triggered (Credentials not set/simulated).'
+    })

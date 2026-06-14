@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'apps.whatsapp',
     'apps.ai',
     'apps.escalation',
+    'apps.chat',
 ]
 
 # ──────────────────────────────────────────────

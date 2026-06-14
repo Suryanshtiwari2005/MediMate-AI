@@ -9,6 +9,7 @@ urlpatterns = [
 
     # Auth endpoints — /auth/google/login/, /auth/callback/, /auth/me/
     path('auth/', include('apps.users.urls')),
+    path('api/auth/', include('apps.users.urls')),
 
     # API endpoints
     path('api/patients/', include('apps.patients.urls')),
@@ -17,6 +18,7 @@ urlpatterns = [
     path('api/whatsapp/', include('apps.whatsapp.urls')),
     path('api/ai/', include('apps.ai.urls')),
     path('api/escalation/', include('apps.escalation.urls')),
+    path('api/chat/', include('apps.chat.urls')),
     path('api/admin/stats/', users_views.admin_stats, name='admin-stats'),
     path('api/admin/users/', users_views.admin_users, name='admin-users'),
 

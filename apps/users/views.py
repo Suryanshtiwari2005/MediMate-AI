@@ -29,7 +29,7 @@ def google_login(request):
         f"&access_type=offline"
         f"&prompt=consent"
     )
-    return Response({'auth_url': auth_url})
+    return redirect(auth_url)
 
 
 @api_view(['GET'])
@@ -64,26 +64,41 @@ def google_callback(request):
     )
     userinfo = userinfo_resp.json()
 
-    # Create or get user — Feature #14: avatar_url saved from Google profile
-    user, created = User.objects.get_or_create(
-        google_id=userinfo['id'],
-        defaults={
-            'username': userinfo['email'].split('@')[0],
-            'email': userinfo['email'],
-            'full_name': userinfo.get('name', ''),
-            'avatar_url': userinfo.get('picture', ''),
-        }
-    )
-    if not created:
-        # Update profile info on each login
+    # Get or create user — link by email first if they exist (e.g. created by caretaker)
+    email = userinfo['email']
+    google_id = userinfo['id']
+    try:
+        user = User.objects.get(email__iexact=email.strip())
+        created = False
+        if not user.google_id:
+            user.google_id = google_id
         user.full_name = userinfo.get('name', user.full_name)
         user.avatar_url = userinfo.get('picture', user.avatar_url)
         user.save()
+    except User.DoesNotExist:
+        user = User.objects.create(
+            google_id=google_id,
+            username=email.split('@')[0],
+            email=email,
+            full_name=userinfo.get('name', ''),
+            avatar_url=userinfo.get('picture', ''),
+            role='patient'
+        )
+        created = True
 
     # Issue JWT tokens — Feature #2
     refresh = RefreshToken.for_user(user)
     refresh['role'] = user.role
     refresh['email'] = user.email
+
+    # Determine if user is new or needs role selection
+    has_profile = False
+    if user.role == 'patient':
+        has_profile = hasattr(user, 'patient_profile')
+    elif user.role == 'caretaker':
+        has_profile = hasattr(user, 'caretaker_profile')
+    
+    is_new = created or (user.role == 'patient' and not has_profile)
 
     # Redirect to frontend with tokens in URL params
     frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
@@ -95,6 +110,7 @@ def google_callback(request):
         f"&role={user.role}"
         f"&name={user.full_name}"
         f"&avatar={user.avatar_url or ''}"
+        f"&is_new={str(is_new).lower()}"
     )
     return redirect(redirect_url)
 
@@ -220,4 +236,36 @@ def admin_users(request):
         'current_page': page_obj.number,
         'has_next': page_obj.has_next(),
         'has_previous': page_obj.has_previous(),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def select_role(request):
+    """
+    Allows a newly registered Google user to select their role.
+    POST /auth/select-role/
+    Body: { "role": "patient" | "caretaker" }
+    """
+    role = request.data.get('role')
+    if role not in ('patient', 'caretaker'):
+        return Response({'error': 'Role must be patient or caretaker'}, status=400)
+    
+    user = request.user
+    user.role = role
+    user.save()
+    
+    if role == 'caretaker':
+        from apps.patients.models import Caretaker
+        Caretaker.objects.get_or_create(user=user)
+    
+    return Response({
+        'success': True,
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'full_name': user.full_name,
+            'role': user.role,
+            'avatar_url': user.avatar_url,
+        }
     })
