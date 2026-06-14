@@ -115,6 +115,97 @@ def google_callback(request):
     return redirect(redirect_url)
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def email_login(request):
+    """
+    Email/Password Login — issues JWT tokens.
+    POST /auth/login/
+    Body: { "email": "...", "password": "..." }
+    """
+    email = request.data.get('email')
+    password = request.data.get('password')
+    if not email or not password:
+        return Response({'detail': 'Email and password are required.'}, status=400)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'detail': 'No account found with this email.'}, status=401)
+
+    if not user.check_password(password):
+        return Response({'detail': 'Invalid password.'}, status=401)
+
+    refresh = RefreshToken.for_user(user)
+    refresh['role'] = user.role
+    refresh['email'] = user.email
+
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'full_name': user.full_name,
+            'role': user.role,
+            'avatar_url': user.avatar_url,
+            'whatsapp_number': user.whatsapp_number,
+        }
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def email_register(request):
+    """
+    Email/Password Registration — creates user + issues JWT tokens.
+    POST /auth/register/
+    Body: { "name": "...", "email": "...", "password": "...", "role": "patient" }
+    """
+    name = request.data.get('name', '')
+    email = request.data.get('email')
+    password = request.data.get('password')
+    role = request.data.get('role', 'patient')
+
+    if not email or not password:
+        return Response({'detail': 'Email and password are required.'}, status=400)
+
+    if User.objects.filter(email=email).exists():
+        return Response({'detail': 'An account with this email already exists.'}, status=400)
+
+    if role not in ('patient', 'caretaker'):
+        return Response({'detail': 'Role must be patient or caretaker.'}, status=400)
+
+    user = User.objects.create_user(
+        username=email.split('@')[0],
+        email=email,
+        password=password,
+        full_name=name,
+        role=role,
+    )
+
+    # Auto-create caretaker profile if role is caretaker
+    if role == 'caretaker':
+        from apps.patients.models import Caretaker
+        Caretaker.objects.create(user=user)
+
+    refresh = RefreshToken.for_user(user)
+    refresh['role'] = user.role
+    refresh['email'] = user.email
+
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'full_name': user.full_name,
+            'role': user.role,
+            'avatar_url': user.avatar_url,
+        }
+    }, status=201)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def auth_me(request):

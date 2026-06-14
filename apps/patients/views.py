@@ -334,3 +334,64 @@ def patient_me(request):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assign_caretaker(request):
+    """
+    Feature #61: Assign a caretaker to a patient.
+
+    Body: { "patient_id": 1, "caretaker_id": 2 }
+    Only admins or the caretaker themselves can do this.
+    """
+    patient_id = request.data.get('patient_id')
+    caretaker_id = request.data.get('caretaker_id')
+
+    if not patient_id or not caretaker_id:
+        return Response(
+            {"error": "Both patient_id and caretaker_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        patient = PatientProfile.objects.get(id=patient_id)
+        caretaker = Caretaker.objects.get(id=caretaker_id)
+    except PatientProfile.DoesNotExist:
+        return Response({"error": "Patient not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Caretaker.DoesNotExist:
+        return Response({"error": "Caretaker not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    # Add patient to caretaker's list (M2M)
+    caretaker.patients.add(patient)
+
+    return Response({
+        "message": f"Caretaker {caretaker.user.full_name} assigned to patient {patient.user.full_name}",
+        "caretaker": CaretakerSerializer(caretaker).data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_caretaker(request):
+    """Remove a caretaker from a patient."""
+    patient_id = request.data.get('patient_id')
+    caretaker_id = request.data.get('caretaker_id')
+
+    if not patient_id or not caretaker_id:
+        return Response(
+            {"error": "Both patient_id and caretaker_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        patient = PatientProfile.objects.get(id=patient_id)
+        caretaker = Caretaker.objects.get(id=caretaker_id)
+    except (PatientProfile.DoesNotExist, Caretaker.DoesNotExist):
+        return Response({"error": "Patient or Caretaker not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    caretaker.patients.remove(patient)
+
+    return Response({
+        "message": f"Caretaker {caretaker.user.full_name} removed from patient {patient.user.full_name}",
+    })

@@ -1,18 +1,15 @@
 """
-Feature #35: CallMeBot Integration
+Feature #35: Meta WhatsApp Cloud API Integration
 Feature #36: Interactive Button Template
 Feature #43: WhatsApp Interaction Log
 
-Sends WhatsApp messages via CallMeBot free gateway and logs all interactions.
+Sends WhatsApp messages via official WhatsApp Cloud API and logs all interactions.
 """
 import httpx
-import urllib.parse
 import os
 import logging
 
 logger = logging.getLogger(__name__)
-
-CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php"
 
 # Feature #36: Interactive Button Template with 1/2/3 reply options
 REMINDER_TEMPLATE = """💊 MediMate Reminder — {patient_name}
@@ -31,7 +28,6 @@ Reply with:
 
 
 def send_whatsapp_message(phone: str, message: str) -> bool:
-    """
     Sends a WhatsApp message.
     - If WHATSAPP_ACCESS_TOKEN is set, it uses the official Meta WhatsApp Cloud API.
     - Else if CALLMEBOT_APIKEY is set, it uses the CallMeBot free gateway.
@@ -44,7 +40,7 @@ def send_whatsapp_message(phone: str, message: str) -> bool:
     clean_phone = ''.join(c for c in str(phone) if c.isdigit())
 
     if access_token and phone_id:
-        url = f"https://graph.facebook.com/v18.0/{phone_id}/messages"
+        url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
@@ -75,6 +71,7 @@ def send_whatsapp_message(phone: str, message: str) -> bool:
     # Fallback to CallMeBot
     apikey = os.environ.get('CALLMEBOT_APIKEY', '')
     if apikey:
+        CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php"
         params = {
             'phone': phone,
             'text': message,

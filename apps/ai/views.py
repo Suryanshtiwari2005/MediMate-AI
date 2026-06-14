@@ -2,7 +2,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from services.ai_service import calculate_risk_score, get_7d_predictions, get_adherence_trend
+from django.db.models import Q
+from services.ai_service import calculate_risk_score, get_7d_predictions, get_adherence_trend as get_adherence_trend_service
 from apps.patients.models import PatientProfile
 from apps.doses.models import DoseLog
 
@@ -25,15 +26,20 @@ def get_risk_score(request):
             return Response({'error': 'patient_id query parameter is required for caretakers/admins'}, status=400)
         if user.role == 'caretaker':
             try:
-                patient = user.caretaker_profile.patients.filter(id=patient_id).first()
+                patient = user.caretaker_profile.patients.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
                 if not patient:
                     return Response({'error': 'Unauthorized or patient not assigned'}, status=403)
             except Exception:
                 return Response({'error': 'Caretaker profile not found'}, status=404)
         else:
-            patient = PatientProfile.objects.filter(id=patient_id).first()
+            patient = PatientProfile.objects.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
             if not patient:
-                return Response({'error': 'Patient profile not found'}, status=404)
+                from apps.users.models import User
+                user_obj = User.objects.filter(id=patient_id, role='patient').first()
+                if user_obj:
+                    patient = PatientProfile(id=user_obj.id, user=user_obj, onboarding_done=False)
+                else:
+                    return Response({'error': 'Patient profile not found'}, status=404)
                 
     result = calculate_risk_score(patient.id)
     return Response(result)
@@ -58,15 +64,20 @@ def get_predictions(request):
             return Response({'error': 'patient_id query parameter is required for caretakers/admins'}, status=400)
         if user.role == 'caretaker':
             try:
-                patient = user.caretaker_profile.patients.filter(id=patient_id).first()
+                patient = user.caretaker_profile.patients.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
                 if not patient:
                     return Response({'error': 'Unauthorized or patient not assigned'}, status=403)
             except Exception:
                 return Response({'error': 'Caretaker profile not found'}, status=404)
         else:
-            patient = PatientProfile.objects.filter(id=patient_id).first()
+            patient = PatientProfile.objects.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
             if not patient:
-                return Response({'error': 'Patient profile not found'}, status=404)
+                from apps.users.models import User
+                user_obj = User.objects.filter(id=patient_id, role='patient').first()
+                if user_obj:
+                    patient = PatientProfile(id=user_obj.id, user=user_obj, onboarding_done=False)
+                else:
+                    return Response({'error': 'Patient profile not found'}, status=404)
                 
     predictions = get_7d_predictions(patient.id)
     return Response({'predictions': predictions})
@@ -91,17 +102,22 @@ def get_adherence_trend(request):
             return Response({'error': 'patient_id query parameter is required for caretakers/admins'}, status=400)
         if user.role == 'caretaker':
             try:
-                patient = user.caretaker_profile.patients.filter(id=patient_id).first()
+                patient = user.caretaker_profile.patients.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
                 if not patient:
                     return Response({'error': 'Unauthorized or patient not assigned'}, status=403)
             except Exception:
                 return Response({'error': 'Caretaker profile not found'}, status=404)
         else:
-            patient = PatientProfile.objects.filter(id=patient_id).first()
+            patient = PatientProfile.objects.filter(Q(id=patient_id) | Q(user_id=patient_id)).first()
             if not patient:
-                return Response({'error': 'Patient profile not found'}, status=404)
+                from apps.users.models import User
+                user_obj = User.objects.filter(id=patient_id, role='patient').first()
+                if user_obj:
+                    patient = PatientProfile(id=user_obj.id, user=user_obj, onboarding_done=False)
+                else:
+                    return Response({'error': 'Patient profile not found'}, status=404)
                 
-    trend = get_adherence_trend(patient.id)
+    trend = get_adherence_trend_service(patient.id)
     return Response({'trend': trend})
 
 

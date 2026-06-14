@@ -1,6 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import PatientProfileViewSet, CaretakerViewSet, caretaker_dashboard, patient_onboarding, patient_me
+from .views import (
+    PatientProfileViewSet,
+    CaretakerViewSet,
+    caretaker_dashboard,
+    patient_onboarding,
+    patient_me,
+    assign_caretaker,
+    remove_caretaker,
+)
 
 router = DefaultRouter()
 router.register(r'profiles', PatientProfileViewSet, basename='patient-profile')
@@ -23,6 +31,8 @@ urlpatterns = [
     path('onboarding/', patient_onboarding, name='patient-onboarding'),
     path('me/', patient_me, name='patient-me'),
     path('caretaker-dashboard/', caretaker_dashboard, name='caretaker-dashboard'),
+    path('assign-caretaker/', assign_caretaker, name='assign-caretaker'),
+    path('remove-caretaker/', remove_caretaker, name='remove-caretaker'),
     path('', patient_list, name='patient-list'),
     path('<int:pk>/', patient_detail, name='patient-detail'),
     path('', include(router.urls)),
