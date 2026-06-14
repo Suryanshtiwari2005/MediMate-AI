@@ -17,6 +17,7 @@ import MedicinesPage from './pages/patient/MedicinesPage';
 import OnboardingPage from './pages/patient/OnboardingPage';
 import EscalationLogs from './pages/patient/EscalationLogs';
 import PatientSettings from './pages/patient/PatientSettings';
+import ChatPage from './pages/patient/ChatPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -30,6 +31,7 @@ import CaretakerDashboard from './pages/caretaker/CaretakerDashboard';
 import CaretakerPatients from './pages/caretaker/CaretakerPatients';
 import CaretakerEscalations from './pages/caretaker/CaretakerEscalations';
 import CaretakerPatientProfile from './pages/caretaker/CaretakerPatientProfile';
+import CaretakerChat from './pages/caretaker/CaretakerChat';
 
 export default function App() {
   return (
@@ -90,6 +92,14 @@ export default function App() {
             element={
               <ProtectedRoute role="patient">
                 <MedicinesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/chat"
+            element={
+              <ProtectedRoute role="patient">
+                <ChatPage />
               </ProtectedRoute>
             }
           />
@@ -182,6 +192,14 @@ export default function App() {
             element={
               <ProtectedRoute role="caretaker">
                 <CaretakerPatientProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/caretaker/chat"
+            element={
+              <ProtectedRoute role="caretaker">
+                <CaretakerChat />
               </ProtectedRoute>
             }
           />

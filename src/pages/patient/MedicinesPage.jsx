@@ -55,16 +55,48 @@ function AddMedicineModal({ onClose, onAdded }) {
 function AddScheduleModal({ medicines, onClose, onAdded }) {
   const [form, setForm] = useState({ medicine_id: '', time: '08:00', start_date: new Date().toISOString().split('T')[0], end_date: '' });
   const [loading, setLoading] = useState(false);
+  const [conflicts, setConflicts] = useState(null);
+  const [conflictLoading, setConflictLoading] = useState(false);
+  const [bypassConfirmed, setBypassConfirmed] = useState(false);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' };
 
+  // Check for conflicts when medicine is selected
+  const handleMedicineChange = async (e) => {
+    const medId = e.target.value;
+    setForm(f => ({ ...f, medicine_id: medId }));
+    setConflicts(null);
+    setBypassConfirmed(false);
+
+    if (!medId) return;
+
+    setConflictLoading(true);
+    try {
+      const { data } = await apiClient.post('/chat/check-conflict/', { medicine_id: parseInt(medId) });
+      if (data && !data.safe && data.warnings?.length > 0) {
+        setConflicts(data);
+      }
+    } catch (err) {
+      console.error('Conflict check failed:', err);
+      // Don't block the user if the check fails
+    } finally {
+      setConflictLoading(false);
+    }
+  };
+
+  const hasMajorConflict = conflicts?.warnings?.some(w => w.severity === 'major');
+  const canSubmit = !loading && !conflictLoading && (!conflicts || (!hasMajorConflict && bypassConfirmed) || (!conflicts));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (hasMajorConflict) return;
+    if (conflicts && !bypassConfirmed) return;
+
     setLoading(true);
     try {
       await apiClient.post('/medicines/schedules/', {
         medicine_id: parseInt(form.medicine_id),
-        time: form.time,
+        scheduled_time: form.time,
         start_date: form.start_date,
         end_date: form.end_date || null,
       });
@@ -87,11 +119,58 @@ function AddScheduleModal({ medicines, onClose, onAdded }) {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>MEDICINE</label>
-            <select required value={form.medicine_id} onChange={set('medicine_id')} style={{ ...inputStyle, cursor: 'pointer' }}>
+            <select required value={form.medicine_id} onChange={handleMedicineChange} style={{ ...inputStyle, cursor: 'pointer' }}>
               <option value="">Select medicine...</option>
               {medicines.map(m => <option key={m.id} value={m.id}>{m.name} ({m.dosage})</option>)}
             </select>
           </div>
+
+          {/* Conflict Loading */}
+          {conflictLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)' }}>
+              <Loader2 size={14} color="var(--cyan)" style={{ animation: 'spin 1s linear infinite' }} />
+              <span style={{ fontSize: 12, color: 'var(--cyan)', fontWeight: 500 }}>Checking for medicine interactions with AI...</span>
+            </div>
+          )}
+
+          {/* Conflict Warnings */}
+          {conflicts && conflicts.warnings?.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {conflicts.warnings.map((w, i) => (
+                <div key={i} style={{
+                  padding: '10px 14px', borderRadius: 10,
+                  background: w.severity === 'major' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',
+                  border: `1px solid ${w.severity === 'major' ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.25)'}`,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 4, color: w.severity === 'major' ? '#ef4444' : 'var(--amber)' }}>
+                    {w.severity === 'major' ? '🚫 Major Conflict' : w.severity === 'moderate' ? '⚠️ Moderate Warning' : '💡 Minor Note'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{w.message}</div>
+                </div>
+              ))}
+
+              {hasMajorConflict && (
+                <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, textAlign: 'center', padding: '6px 0' }}>
+                  This medicine cannot be scheduled due to a major conflict. Please consult your doctor.
+                </div>
+              )}
+
+              {!hasMajorConflict && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '6px 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={bypassConfirmed}
+                    onChange={e => setBypassConfirmed(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: 'var(--amber)' }}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    I have consulted my doctor and wish to schedule this medicine anyway.
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+
           <div>
             <label style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>TIME</label>
             <input required type="time" value={form.time} onChange={set('time')} style={inputStyle} />
@@ -106,7 +185,12 @@ function AddScheduleModal({ medicines, onClose, onAdded }) {
               <input type="date" value={form.end_date} onChange={set('end_date')} style={inputStyle} />
             </div>
           </div>
-          <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', marginTop: 8 }}>
+          <button
+            type="submit"
+            disabled={loading || hasMajorConflict || (conflicts && !hasMajorConflict && !bypassConfirmed)}
+            className="btn-primary"
+            style={{ width: '100%', marginTop: 8, opacity: (hasMajorConflict || (conflicts && !bypassConfirmed)) ? 0.5 : 1 }}
+          >
             {loading ? 'Adding...' : 'Add Schedule'}
           </button>
         </form>
@@ -246,7 +330,7 @@ export default function MedicinesPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{sched.medicine?.name || `Medicine #${sched.medicine}`}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Time: {sched.time?.slice(0, 5)} · From: {sched.start_date} {sched.end_date ? `→ ${sched.end_date}` : '(ongoing)'}
+                  Time: {(sched.scheduled_time || sched.time)?.slice(0, 5)} · From: {sched.start_date} {sched.end_date ? `→ ${sched.end_date}` : '(ongoing)'}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

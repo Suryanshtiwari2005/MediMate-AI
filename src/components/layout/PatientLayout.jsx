@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Pill, Calendar, Brain, MessageSquare, Settings, LogOut, Menu, X, ChevronRight, Bell, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Pill, Calendar, Brain, MessageSquare, Settings, LogOut, Menu, X, ChevronRight, Bell, AlertTriangle, Bot } from 'lucide-react';
 import { useAuth, apiClient } from '@/context/AuthContext';
 
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'My Medicines', icon: Pill, to: '/dashboard/medicines' },
   { label: 'Dose History', icon: Calendar, to: '/dashboard/history' },
+  { label: 'AI Chat', icon: Bot, to: '/dashboard/chat' },
   { label: 'AI Predictions', icon: Brain, to: '/dashboard/predictions' },
-  { label: 'WhatsApp Log', icon: MessageSquare, to: '/dashboard/whatsapp' },
   { label: 'Escalations', icon: AlertTriangle, to: '/dashboard/escalations' },
   { label: 'Settings', icon: Settings, to: '/dashboard/settings' },
 ];
@@ -74,8 +74,8 @@ export default function PatientLayout({ children }) {
             <span style={{ fontSize: 14, fontWeight: 700, color: '#050d1a' }}>{user?.name?.[0]?.toUpperCase() || 'P'}</span>
           </div>
           <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'Patient'}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Patient</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'User'}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{user?.role || 'Patient'}</div>
           </div>
         </div>
       </div>

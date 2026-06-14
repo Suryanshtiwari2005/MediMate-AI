@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, AlertTriangle, LogOut, Pill, Bell, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, AlertTriangle, LogOut, Pill, Bell, Menu, X, MessageSquare } from 'lucide-react';
 import { useAuth, apiClient } from '@/context/AuthContext';
 
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/caretaker' },
   { label: 'Patients', icon: Users, to: '/caretaker/patients' },
+  { label: 'Chat', icon: MessageSquare, to: '/caretaker/chat' },
   { label: 'Escalations', icon: AlertTriangle, to: '/caretaker/escalations' },
 ];
 

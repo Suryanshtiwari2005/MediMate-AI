@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, Activity, Search, Loader2, Phone, Heart, Shield } from 'lucide-react';
+import { Users, AlertTriangle, Activity, Search, Loader2, Phone, Heart, Shield, Plus, X } from 'lucide-react';
 import { apiClient } from '@/context/AuthContext';
 import CaretakerLayout from '@/components/layout/CaretakerLayout';
 
@@ -17,12 +17,111 @@ export default function CaretakerPatients() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Link Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('existing'); // 'existing' | 'new'
+  const [email, setEmail] = useState('');
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const [modalSuccess, setModalSuccess] = useState('');
+
+  // Create New Patient Form States
+  const [newForm, setNewForm] = useState({
+    name: '',
+    email: '',
+    age: '',
+    gender: 'male',
+    blood_group: '',
+    diseases: '',
+    allergies: '',
+    chronic_conditions: '',
+    whatsapp_number: '',
+    emergency_phone: '',
+  });
+
   useEffect(() => {
     apiClient.get('/patients/')
       .then(res => setPatients(Array.isArray(res.data) ? res.data : []))
       .catch(() => setPatients([]))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleLinkPatient = async () => {
+    setModalLoading(true);
+    setModalError('');
+    setModalSuccess('');
+    try {
+      const res = await apiClient.post('/patients/caretakers/link_patient/', { email });
+      const newPatient = res.data.patient;
+      
+      // Update local state list
+      setPatients(prev => [...prev, newPatient]);
+      setModalSuccess('Patient linked successfully!');
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        setIsModalOpen(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Link patient error:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Failed to link patient. Ensure the email is correct and they have onboarded.';
+      setModalError(msg);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleCreateAndLinkPatient = async () => {
+    setModalLoading(true);
+    setModalError('');
+    setModalSuccess('');
+    try {
+      const payload = {
+        name: newForm.name,
+        email: newForm.email,
+        age: parseInt(newForm.age) || null,
+        gender: newForm.gender,
+        blood_group: newForm.blood_group || null,
+        diseases: newForm.diseases,
+        allergies: newForm.allergies,
+        chronic_conditions: newForm.chronic_conditions,
+        whatsapp_number: newForm.whatsapp_number || null,
+        emergency_phone: newForm.emergency_phone || null,
+      };
+
+      const res = await apiClient.post('/patients/caretakers/create_and_link_patient/', payload);
+      const newPatient = res.data.patient;
+
+      // Update local state list
+      setPatients(prev => [...prev, newPatient]);
+      setModalSuccess('Patient created and linked successfully!');
+
+      // Reset form
+      setNewForm({
+        name: '',
+        email: '',
+        age: '',
+        gender: 'male',
+        blood_group: '',
+        diseases: '',
+        allergies: '',
+        chronic_conditions: '',
+        whatsapp_number: '',
+        emergency_phone: '',
+      });
+
+      // Close modal after a short delay
+      setTimeout(() => {
+        setIsModalOpen(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Create and link patient error:', err);
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Failed to create patient. Verify your inputs.';
+      setModalError(msg);
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!search.trim()) return patients;
@@ -35,6 +134,28 @@ export default function CaretakerPatients() {
 
   const atRisk = patients.filter(p => p.risk_level && p.risk_level !== 'low').length;
   const allGood = patients.filter(p => !p.risk_level || p.risk_level === 'low').length;
+
+  // Custom Input Style
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    color: 'var(--text-primary)',
+    fontSize: 13,
+    outline: 'none',
+    boxSizing: 'border-box'
+  };
+
+  const labelStyle = { 
+    fontSize: 11, 
+    fontWeight: 600, 
+    color: 'var(--text-secondary)',
+    letterSpacing: '0.02em',
+    marginBottom: 4,
+    display: 'block'
+  };
 
   if (loading) {
     return (
@@ -49,9 +170,35 @@ export default function CaretakerPatients() {
   return (
     <CaretakerLayout>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 className="font-syne" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>My Patients</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>View and manage all your assigned patients.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div>
+          <h1 className="font-syne" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>My Patients</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>View and manage all your assigned patients.</p>
+        </div>
+        <button 
+          onClick={() => {
+            setIsModalOpen(true);
+            setActiveTab('existing');
+            setEmail('');
+            setModalError('');
+            setModalSuccess('');
+          }}
+          className="btn-primary" 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 8, 
+            padding: '12px 20px', 
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, #a78bfa, var(--cyan))',
+            border: 'none',
+            color: '#fff',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          <Plus size={16} /> Link Patient
+        </button>
       </div>
 
       {/* Summary stats */}
@@ -176,6 +323,207 @@ export default function CaretakerPatients() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Link Patient Modal */}
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)} style={{ zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
+          <div style={{ 
+            background: 'var(--bg-card)', 
+            borderRadius: 18, 
+            border: '1px solid var(--border)', 
+            padding: 28, 
+            width: '100%', 
+            maxWidth: 440, 
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            animation: 'fadeInUp 0.2s ease',
+            position: 'relative',
+            boxSizing: 'border-box'
+          }}>
+            <button 
+              onClick={() => setIsModalOpen(false)}
+              style={{ position: 'absolute', right: 20, top: 20, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', zIndex: 10 }}
+            >
+              <X size={18} />
+            </button>
+
+            <h3 className="font-syne" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>Link Patient</h3>
+
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+              <button 
+                onClick={() => { setActiveTab('existing'); setModalError(''); setModalSuccess(''); }}
+                style={{ flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: activeTab === 'existing' ? '#a78bfa' : 'var(--text-muted)', borderBottom: activeTab === 'existing' ? '2px solid #a78bfa' : '2px solid transparent', outline: 'none' }}
+              >
+                Existing Patient
+              </button>
+              <button 
+                onClick={() => { setActiveTab('new'); setModalError(''); setModalSuccess(''); }}
+                style={{ flex: 1, padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: activeTab === 'new' ? '#a78bfa' : 'var(--text-muted)', borderBottom: activeTab === 'new' ? '2px solid #a78bfa' : '2px solid transparent', outline: 'none' }}
+              >
+                Create New Patient
+              </button>
+            </div>
+
+            {modalError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+                <p style={{ color: '#ef4444', fontSize: 12, margin: 0 }}>{modalError}</p>
+              </div>
+            )}
+
+            {modalSuccess && (
+              <div style={{ background: 'rgba(0,255,157,0.1)', border: '1px solid rgba(0,255,157,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+                <p style={{ color: 'var(--emerald)', fontSize: 12, margin: 0 }}>{modalSuccess}</p>
+              </div>
+            )}
+
+            {activeTab === 'existing' ? (
+              /* Link Existing Patient View */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>Enter the patient's registered email address to link them to your monitoring panel.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>PATIENT EMAIL</label>
+                  <input 
+                    type="email" 
+                    placeholder="e.g. raj@example.com" 
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="btn-outline" 
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid var(--border)', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleLinkPatient}
+                    disabled={modalLoading || !email.trim()}
+                    className="btn-primary" 
+                    style={{ 
+                      flex: 1, 
+                      padding: '11px', 
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #a78bfa, var(--cyan))',
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 600,
+                      cursor: (modalLoading || !email.trim()) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    {modalLoading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                    {modalLoading ? 'Linking...' : 'Add Patient'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Create New Patient Form View */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>Fill in the medical and account details below. This will register the patient and link them to your panel.</p>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>FULL NAME</label>
+                  <input type="text" placeholder="Rajesh Kumar" value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>EMAIL ADDRESS (For Google Sign-In)</label>
+                  <input type="email" placeholder="rajesh@gmail.com" value={newForm.email} onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))} style={inputStyle} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={labelStyle}>AGE</label>
+                    <input type="number" placeholder="45" value={newForm.age} onChange={e => setNewForm(f => ({ ...f, age: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={labelStyle}>GENDER</label>
+                    <select value={newForm.gender} onChange={e => setNewForm(f => ({ ...f, gender: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>BLOOD GROUP</label>
+                  <select value={newForm.blood_group} onChange={e => setNewForm(f => ({ ...f, blood_group: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                    <option value="">Select blood group...</option>
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>DISEASES (Comma-separated)</label>
+                  <input type="text" placeholder="e.g. Hypertension, Asthma" value={newForm.diseases} onChange={e => setNewForm(f => ({ ...f, diseases: e.target.value }))} style={inputStyle} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>ALLERGIES (Comma-separated)</label>
+                  <input type="text" placeholder="e.g. Penicillin" value={newForm.allergies} onChange={e => setNewForm(f => ({ ...f, allergies: e.target.value }))} style={inputStyle} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={labelStyle}>CHRONIC CONDITIONS (Comma-separated)</label>
+                  <input type="text" placeholder="e.g. Diabetes" value={newForm.chronic_conditions} onChange={e => setNewForm(f => ({ ...f, chronic_conditions: e.target.value }))} style={inputStyle} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={labelStyle}>WHATSAPP NUMBER</label>
+                    <input type="text" placeholder="+91930..." value={newForm.whatsapp_number} onChange={e => setNewForm(f => ({ ...f, whatsapp_number: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={labelStyle}>EMERGENCY PHONE</label>
+                    <input type="text" placeholder="+91987..." value={newForm.emergency_phone} onChange={e => setNewForm(f => ({ ...f, emergency_phone: e.target.value }))} style={inputStyle} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="btn-outline" 
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1px solid var(--border)', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleCreateAndLinkPatient}
+                    disabled={modalLoading || !newForm.name.trim() || !newForm.email.trim() || !newForm.age.trim()}
+                    className="btn-primary" 
+                    style={{ 
+                      flex: 1, 
+                      padding: '11px', 
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #a78bfa, var(--cyan))',
+                      border: 'none',
+                      color: '#fff',
+                      fontWeight: 600,
+                      cursor: (modalLoading || !newForm.name.trim() || !newForm.email.trim() || !newForm.age.trim()) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    {modalLoading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                    {modalLoading ? 'Creating...' : 'Create & Link'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </CaretakerLayout>
