@@ -28,6 +28,7 @@ Reply with:
 
 
 def send_whatsapp_message(phone: str, message: str) -> bool:
+    """
     Sends a WhatsApp message.
     - If WHATSAPP_ACCESS_TOKEN is set, it uses the official Meta WhatsApp Cloud API.
     - Else if CALLMEBOT_APIKEY is set, it uses the CallMeBot free gateway.
