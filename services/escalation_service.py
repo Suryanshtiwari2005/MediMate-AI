@@ -27,7 +27,7 @@ Please check on them immediately.
 — MediMateAI Escalation System"""
 
 
-def trigger_caretaker_alert(dose_log):
+def trigger_caretaker_alert(dose_log) -> bool:
     """
     Send WhatsApp alert to assigned caretakers.
     Feature #55: Alerts secondary caretaker if available.
@@ -45,16 +45,20 @@ def trigger_caretaker_alert(dose_log):
             success = send_whatsapp_message(emergency, msg)
             _log_escalation(dose_log, patient, 'whatsapp_primary', emergency, msg, success)
             logger.info(f"Emergency fallback alert sent to {emergency}")
+            return success
         else:
             logger.warning(f"No caretaker or emergency contact for patient {patient.id}")
-        return
+            return False
 
     # Send to all assigned caretakers (primary first, then secondary)
+    any_success = False
     for caretaker in caretakers.order_by('-is_primary'):
         phone = caretaker.user.whatsapp_number or caretaker.phone
         if phone:
             msg = _build_alert_message(dose_log)
             success = send_whatsapp_message(phone, msg)
+            if success:
+                any_success = True
             # Feature #55: Distinguish primary vs secondary
             level = 'whatsapp_primary' if caretaker.is_primary else 'whatsapp_secondary'
             # Feature #58: Log the escalation
@@ -63,6 +67,7 @@ def trigger_caretaker_alert(dose_log):
 
     dose_log.escalated = True
     dose_log.save()
+    return any_success
 
 
 def _build_alert_message(dose_log) -> str:

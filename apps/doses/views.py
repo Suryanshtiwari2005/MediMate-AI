@@ -43,7 +43,15 @@ def today_doses(request):
     }
     """
     today = date.today()
-    patient = request.user.patient_profile
+    from apps.patients.models import PatientProfile
+    try:
+        patient = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        return Response({
+            'date': today.isoformat(),
+            'doses': [],
+            'summary': {'total': 0, 'taken': 0, 'pending': 0, 'missed': 0, 'skipped': 0, 'rescheduled': 0},
+        })
 
     doses = DoseLog.objects.filter(
         patient=patient,
@@ -180,7 +188,30 @@ def dose_history(request):
     - end_date: YYYY-MM-DD (default: today)
     - status: pending/taken/missed/skipped (filter by status)
     """
-    patient = request.user.patient_profile
+    from apps.patients.models import PatientProfile
+    try:
+        patient = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        end_date_val = date.today()
+        start_date_val = end_date_val - timedelta(days=7)
+        if start_date_str:
+            try:
+                start_date_val = date.fromisoformat(start_date_str)
+            except ValueError:
+                return Response({"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400)
+        if end_date_str:
+            try:
+                end_date_val = date.fromisoformat(end_date_str)
+            except ValueError:
+                return Response({"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400)
+        return Response({
+            'start_date': start_date_val.isoformat(),
+            'end_date': end_date_val.isoformat(),
+            'count': 0,
+            'doses': [],
+        })
 
     # Parse date range from query params
     start_date_str = request.query_params.get('start_date')
@@ -253,7 +284,26 @@ def weekly_calendar(request):
         ]
     }
     """
-    patient = request.user.patient_profile
+    from apps.patients.models import PatientProfile
+    try:
+        patient = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        week_data = []
+        for i in range(7):
+            day = monday + timedelta(days=i)
+            week_data.append({
+                'date': day.isoformat(),
+                'day': day.strftime('%a'),
+                'is_today': day == today,
+                'taken': 0,
+                'missed': 0,
+                'skipped': 0,
+                'pending': 0,
+                'total': 0,
+            })
+        return Response({'week': week_data})
     today = date.today()
 
     # Get Monday of this week
@@ -295,7 +345,19 @@ def missed_doses(request):
 
     Returns all missed doses in the last N days (default: 7).
     """
-    patient = request.user.patient_profile
+    from apps.patients.models import PatientProfile
+    try:
+        patient = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        days = int(request.query_params.get('days', 7))
+        since = date.today() - timedelta(days=days)
+        return Response({
+            'period_days': days,
+            'since': since.isoformat(),
+            'count': 0,
+            'doses': [],
+        })
+
     days = int(request.query_params.get('days', 7))
     since = date.today() - timedelta(days=days)
 
@@ -328,8 +390,21 @@ def adherence_summary(request):
 
     Returns overall adherence percentage and breakdown.
     """
-    patient = request.user.patient_profile
+    from apps.patients.models import PatientProfile
     days = int(request.query_params.get('days', 30))
+    try:
+        patient = request.user.patient_profile
+    except PatientProfile.DoesNotExist:
+        return Response({
+            'period_days': days,
+            'adherence_percentage': 100.0,
+            'total_doses': 0,
+            'taken': 0,
+            'missed': 0,
+            'skipped': 0,
+            'pending': 0,
+        })
+
     since = date.today() - timedelta(days=days)
 
     doses = DoseLog.objects.filter(

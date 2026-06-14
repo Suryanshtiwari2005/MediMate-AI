@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'apps.whatsapp',
     'apps.ai',
     'apps.escalation',
+    'apps.chat',
 ]
 
 # ──────────────────────────────────────────────
@@ -177,6 +178,7 @@ SIMPLE_JWT = {
 # ──────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',       # Vite dev server
+    'http://localhost:5174',       # Alternative Vite dev server
     'http://localhost:3000',       # In case someone uses CRA
 ]
 CORS_ALLOW_CREDENTIALS = True     # Allow cookies/auth headers

@@ -1,18 +1,15 @@
 """
-Feature #35: CallMeBot Integration
+Feature #35: Meta WhatsApp Cloud API Integration
 Feature #36: Interactive Button Template
 Feature #43: WhatsApp Interaction Log
 
-Sends WhatsApp messages via CallMeBot free gateway and logs all interactions.
+Sends WhatsApp messages via official WhatsApp Cloud API and logs all interactions.
 """
 import httpx
-import urllib.parse
 import os
 import logging
 
 logger = logging.getLogger(__name__)
-
-CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php"
 
 # Feature #36: Interactive Button Template with 1/2/3 reply options
 REMINDER_TEMPLATE = """💊 MediMate Reminder — {patient_name}
@@ -32,34 +29,73 @@ Reply with:
 
 def send_whatsapp_message(phone: str, message: str) -> bool:
     """
-    Feature #35: Send a WhatsApp message via CallMeBot HTTP GET.
-    Returns True if sent successfully, False otherwise.
+    Sends a WhatsApp message.
+    - If WHATSAPP_ACCESS_TOKEN is set, it uses the official Meta WhatsApp Cloud API.
+    - Else if CALLMEBOT_APIKEY is set, it uses the CallMeBot free gateway.
+    - Otherwise, it logs a simulation warning and returns False.
     """
-    apikey = os.environ.get('CALLMEBOT_APIKEY', '')
-    if not apikey:
-        logger.warning("CALLMEBOT_APIKEY not set — skipping WhatsApp send")
-        return False
+    access_token = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
+    phone_id = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
+    
+    # Format phone number for Meta (only digits, e.g. "919999999999")
+    clean_phone = ''.join(c for c in str(phone) if c.isdigit())
 
-    params = {
-        'phone': phone,
-        'text': message,
-        'apikey': apikey,
-    }
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get(CALLMEBOT_URL, params=params)
-            resp.raise_for_status()
-            logger.info(f"WhatsApp sent to {phone}: {resp.status_code}")
-            return True
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            logger.warning("CallMeBot rate limited (429). Will retry in 60s.")
-        else:
-            logger.error(f"WhatsApp send error: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"WhatsApp send failed: {e}")
-        return False
+    if access_token and phone_id:
+        url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_phone,
+            "type": "text",
+            "text": {
+                "preview_url": False,
+                "body": message
+            }
+        }
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(url, headers=headers, json=payload)
+                if resp.status_code in (200, 201):
+                    logger.info(f"Official WhatsApp sent to {phone}: {resp.status_code}")
+                    return True
+                else:
+                    logger.error(f"Official WhatsApp send failed: {resp.status_code} - {resp.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"Official WhatsApp send exception: {e}")
+            return False
+
+    # Fallback to CallMeBot
+    apikey = os.environ.get('CALLMEBOT_APIKEY', '')
+    if apikey:
+        CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php"
+        params = {
+            'phone': phone,
+            'text': message,
+            'apikey': apikey,
+        }
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.get(CALLMEBOT_URL, params=params)
+                resp.raise_for_status()
+                logger.info(f"CallMeBot WhatsApp sent to {phone}: {resp.status_code}")
+                return True
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                logger.warning("CallMeBot rate limited (429). Will retry in 60s.")
+            else:
+                logger.error(f"CallMeBot WhatsApp send error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"CallMeBot WhatsApp send failed: {e}")
+            return False
+
+    logger.warning(f"No WhatsApp API credentials configured (WHATSAPP_ACCESS_TOKEN or CALLMEBOT_APIKEY). Simulated send to {phone}.")
+    return False
 
 
 def send_reminder(dose_log, patient, ai_variables: dict) -> bool:
